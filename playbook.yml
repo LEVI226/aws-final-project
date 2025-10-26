@@ -1,0 +1,172 @@
+---
+- name: Configure EC2 Web Servers
+  hosts: webservers
+  become: yes
+  tasks:
+    - name: Install NGINX
+      yum:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Get private IP address
+      shell: hostname -I | awk '{print $1}'
+      register: private_ip
+      changed_when: false
+
+    - name: Get hostname
+      shell: hostname
+      register: server_hostname
+      changed_when: false
+
+    - name: Create web directory
+      file:
+        path: /usr/share/nginx/html
+        state: directory
+        mode: '0755'
+
+    - name: Generate index.html with server info
+      copy:
+        dest: /usr/share/nginx/html/index.html
+        content: |
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>EC2 Instance - {{ inventory_hostname }}</title>
+              <style>
+                  * {
+                      margin: 0;
+                      padding: 0;
+                      box-sizing: border-box;
+                  }
+                  
+                  body {
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      min-height: 100vh;
+                      display: flex;
+                      justify-content: center;
+                      align-items: center;
+                      padding: 20px;
+                  }
+                  
+                  .container {
+                      background: white;
+                      border-radius: 20px;
+                      padding: 50px;
+                      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                      max-width: 600px;
+                      width: 100%;
+                      text-align: center;
+                      animation: fadeIn 0.5s ease-in;
+                  }
+                  
+                  @keyframes fadeIn {
+                      from { opacity: 0; transform: translateY(20px); }
+                      to { opacity: 1; transform: translateY(0); }
+                  }
+                  
+                  h1 {
+                      color: #333;
+                      margin-bottom: 30px;
+                      font-size: 2.5em;
+                  }
+                  
+                  .info-box {
+                      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                      padding: 30px;
+                      border-radius: 15px;
+                      margin: 20px 0;
+                      color: white;
+                      box-shadow: 0 10px 30px rgba(240, 147, 251, 0.3);
+                  }
+                  
+                  .label {
+                      font-size: 0.9em;
+                      opacity: 0.9;
+                      margin-bottom: 10px;
+                      text-transform: uppercase;
+                      letter-spacing: 2px;
+                  }
+                  
+                  .value {
+                      font-size: 2em;
+                      font-weight: bold;
+                      word-break: break-all;
+                  }
+                  
+                  .hostname-box {
+                      background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+                      padding: 20px;
+                      border-radius: 10px;
+                      margin-top: 20px;
+                      color: white;
+                      box-shadow: 0 10px 30px rgba(67, 233, 123, 0.3);
+                  }
+                  
+                  .footer {
+                      margin-top: 30px;
+                      color: #666;
+                      font-size: 0.9em;
+                  }
+                  
+                  .badge {
+                      display: inline-block;
+                      background: #667eea;
+                      color: white;
+                      padding: 5px 15px;
+                      border-radius: 20px;
+                      margin: 5px;
+                      font-size: 0.85em;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>🚀 Hello from AWS EC2!</h1>
+                  
+                  <div class="info-box">
+                      <div class="label">Instance Private IP Address</div>
+                      <div class="value">{{ private_ip.stdout }}</div>
+                  </div>
+                  
+                  <div class="hostname-box">
+                      <div class="label">Hostname</div>
+                      <div class="value" style="font-size: 1.3em;">{{ server_hostname.stdout }}</div>
+                  </div>
+                  
+                  <div class="footer">
+                      <p><span class="badge">⚡ NGINX</span> <span class="badge">🐧 Amazon Linux 2023</span></p>
+                      <p style="margin-top: 15px;">🌍 Region: eu-north-1 (Stockholm)</p>
+                      <p>📅 Deployed with Ansible Automation</p>
+                  </div>
+              </div>
+          </body>
+          </html>
+        mode: '0644'
+
+    - name: Ensure NGINX is enabled and started
+      systemd:
+        name: nginx
+        enabled: yes
+        state: started
+
+    - name: Restart NGINX to apply changes
+      systemd:
+        name: nginx
+        state: restarted
+
+    - name: Verify NGINX is running
+      uri:
+        url: http://localhost
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 5
+      delay: 2
+
+    - name: Display server info
+      debug:
+        msg: "Server {{ inventory_hostname }} configured with IP {{ private_ip.stdout }}"
